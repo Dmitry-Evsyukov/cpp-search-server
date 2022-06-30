@@ -445,6 +445,9 @@ void TestDocumentContentMinusWords() {
 
         const auto found_docs = server.FindTopDocuments("too -easy -chemistry teacher seats play staff basketball"s);
         ASSERT_EQUAL(found_docs.size(), 3);
+        ASSERT_EQUAL(found_docs[0].id, doc_id2);
+        ASSERT_EQUAL(found_docs[1].id, doc_id0);
+        ASSERT_EQUAL(found_docs[2].id, doc_id1);
     }
 }
 
@@ -459,13 +462,19 @@ void TestMatchingDocument() {
         SearchServer server;
         server.AddDocument(doc_id0, content0, DocumentStatus::ACTUAL, ratings);
 
-        const auto found_tuple_with_vec_words0 = server.MatchDocument("-play from person"s, 0);
-        const auto found_vector_words0 = get<0>(found_tuple_with_vec_words0);
-        ASSERT_EQUAL(found_vector_words0.size(), 0);
+        const auto [documents0, status0] = server.MatchDocument("-play from person"s, 0);
+        ASSERT_EQUAL(documents0.size(), 0);
 
-        const auto found_tuple_with_vec_words1 = server.MatchDocument("Good play from"s, 0);
-        const auto found_vector_words1 = get<0>(found_tuple_with_vec_words1);
-        ASSERT_EQUAL(found_vector_words1.size(), 3);
+        const auto [documents1, status1] = server.MatchDocument("Good play from"s, 0);
+        ASSERT_EQUAL(documents1.size(), 3);
+        ASSERT_EQUAL(documents1[0], "Good");
+        ASSERT_EQUAL(documents1[1], "from");
+        ASSERT_EQUAL(documents1[2], "play");
+
+        const auto [documents2, status2] = server.MatchDocument("person Good"s, 0);
+        ASSERT_EQUAL(documents2.size(), 2);
+        ASSERT_EQUAL(documents2[0], "Good");
+        ASSERT_EQUAL(documents2[1], "person");
     }
 }
 
@@ -489,11 +498,11 @@ void TestSortRelevanceDocumentContent() {
     const string content4 = "chemistry teacher much different seats comedy"s;
     {
         SearchServer server;
-        server.AddDocument(doc_id0, content0, DocumentStatus::ACTUAL, ratings);
-        server.AddDocument(doc_id1, content1, DocumentStatus::ACTUAL, ratings);
+        server.AddDocument(doc_id3, content0, DocumentStatus::ACTUAL, ratings);
+        server.AddDocument(doc_id4, content1, DocumentStatus::ACTUAL, ratings);
         server.AddDocument(doc_id2, content2, DocumentStatus::ACTUAL, ratings);
-        server.AddDocument(doc_id3, content3, DocumentStatus::ACTUAL, ratings);
-        server.AddDocument(doc_id4, content4, DocumentStatus::ACTUAL, ratings);
+        server.AddDocument(doc_id0, content3, DocumentStatus::ACTUAL, ratings);
+        server.AddDocument(doc_id1, content4, DocumentStatus::ACTUAL, ratings);
 
         const auto found_docs = server.FindTopDocuments("play football different ping-pong seats"s);
 
@@ -510,12 +519,13 @@ void TestDocumentContentRating() {
     const int doc_id0 = 0;
     const string content0 = "Good play too much from person really Good person"s;
     const vector<int> ratings = {2, 4, 6};
+    int average_rating = (ratings[0] + ratings[1] + ratings[2]) / ratings.size();
     {
         SearchServer server;
         server.AddDocument(doc_id0, content0, DocumentStatus::ACTUAL, ratings);
         const auto found_docs = server.FindTopDocuments("Good"s);
         ASSERT_EQUAL(found_docs.size(), 1);
-        ASSERT_EQUAL(found_docs[0].rating, 4);
+        ASSERT_EQUAL(found_docs[0].rating, average_rating);
     }
 }
 
@@ -543,16 +553,12 @@ void TestPredicateRating() {
         server.AddDocument(doc_id2, content2, DocumentStatus::ACTUAL, ratings2);
         server.AddDocument(doc_id3, content3, DocumentStatus::ACTUAL, ratings3);
 
-        const auto found_docs = server.FindTopDocuments("too play different"s, [](int document_id, DocumentStatus status, int rating){int i = document_id;
-            if (status == DocumentStatus::ACTUAL) {
-                ++ i;
-            }
-            ++i;
-            int j = rating;
-            ++j;
+        const auto found_docs = server.FindTopDocuments("too play different"s, [](int document_id, DocumentStatus status, int rating){
             return rating >= 10;
         });
         ASSERT_EQUAL(found_docs.size(), 2);
+        ASSERT_EQUAL(found_docs[0].id, doc_id2);
+        ASSERT_EQUAL(found_docs[1].id, doc_id1);
     }
 }
 
@@ -581,13 +587,12 @@ void TestDocumentContentPredicate() {
         server.AddDocument(doc_id2, content2, DocumentStatus::ACTUAL, ratings);
         server.AddDocument(doc_id3, content3, DocumentStatus::BANNED, ratings);
         server.AddDocument(doc_id4, content4, DocumentStatus::REMOVED, ratings);
-        const auto found_docs = server.FindTopDocuments("different play"s, [](int document_id, DocumentStatus status, int rating){int i = document_id;
-            ++i;
-            int j = rating;
-            ++j;
+        const auto found_docs = server.FindTopDocuments("different play"s, [](int document_id, DocumentStatus status, int rating){
             return status == DocumentStatus::REMOVED;
         });
         ASSERT_EQUAL(found_docs.size(), 2);
+        ASSERT_EQUAL(found_docs[0].id, doc_id0);
+        ASSERT_EQUAL(found_docs[1].id, doc_id4);
     }
 }
 
@@ -609,6 +614,13 @@ void TestDocumentContentRelevance() {
 
     const int doc_id4 = 4;
     const string content4 = "chemistry teacher much different seats comedy"s;
+
+    double document_count = 5;
+    double tf_person_word = (double)2 / (double)12;
+    double tf_everything_word = (double)3 / (double)12;
+    double idf_document_person = log(document_count / 1);
+    double idf_document_everything = log(document_count / 1);
+    double document_relevance = tf_person_word * idf_document_person + idf_document_everything * tf_everything_word;
     {
         SearchServer server;
         server.AddDocument(doc_id0, content0, DocumentStatus::ACTUAL, ratings);
@@ -618,7 +630,8 @@ void TestDocumentContentRelevance() {
         server.AddDocument(doc_id4, content4, DocumentStatus::ACTUAL, ratings);
         const auto found_docs = server.FindTopDocuments("person everything"s);
         ASSERT_EQUAL(found_docs.size(),  1);
-        ASSERT(abs(found_docs[0].relevance - DOCUMENT_RELEVANCE) < MAX_DEVIATION);
+
+        ASSERT(abs(found_docs[0].relevance - document_relevance) < MAX_DEVIATION);
     }
 }
 
