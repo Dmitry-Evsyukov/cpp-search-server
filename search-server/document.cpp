@@ -33,4 +33,3 @@ void PrintMatchDocumentResult(int document_id, const vector<string>& words, Docu
     cout << "}"s << endl;
 }
 
-

@@ -15,9 +15,11 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     const double inv_word_count = 1.0 / words.size();
     for (const string& word : words) {
         word_to_document_freqs_[word][document_id] += inv_word_count;
+        document_to_word_freqs_[document_id][word] += inv_word_count;
     }
     documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
     document_ids_.push_back(document_id);
+    sort(document_ids_.begin(), document_ids_.end());
 }
 
 vector<Document> SearchServer::FindTopDocuments(const string& raw_query, DocumentStatus status) const {
@@ -34,11 +36,39 @@ int SearchServer::GetDocumentCount() const {
     return documents_.size();
 }
 
-int SearchServer::GetDocumentId(int index) const {
-    return document_ids_.at(index);
+vector<int>::const_iterator SearchServer::begin() const {
+    return document_ids_.cbegin();
+}
+
+vector<int>::const_iterator SearchServer::end() const {
+    return document_ids_.cend();
+}
+
+const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    static map<string, double> empty_answer;
+    if (document_to_word_freqs_.count(document_id) == 0) {
+        return empty_answer;
+    }
+    const map <string, double>& answer = document_to_word_freqs_.at(document_id);
+    return answer;
+}
+
+void SearchServer::RemoveDocument(int document_id) {
+    if (documents_.count(document_id) == 0) {
+        return;
+    }
+    documents_.erase(document_id);
+    auto word_freq = document_to_word_freqs_.at(document_id);
+    for (auto [word, freq] : word_freq) {
+        word_to_document_freqs_[word].erase(document_id);
+    }
+    document_to_word_freqs_.erase(document_id);
+    auto it = std::remove(document_ids_.begin(), document_ids_.end(), document_id);
+    document_ids_.erase(it, document_ids_.end());
 }
 
 tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
+    //LOG_DURATION_STREAM("Operation time", cerr);
     const auto query = ParseQuery(raw_query);
 
     vector<string> matched_words;
@@ -139,6 +169,7 @@ void AddDocument(SearchServer& search_server, int document_id, const string& doc
 }
 
 void FindTopDocuments(const SearchServer& search_server, const string& raw_query) {
+    //LOG_DURATION_STREAM("Operation time", cerr);
     cout << "Результаты поиска по запросу: "s << raw_query << endl;
     try {
         for (const Document& document : search_server.FindTopDocuments(raw_query)) {
@@ -150,11 +181,10 @@ void FindTopDocuments(const SearchServer& search_server, const string& raw_query
 }
 
 void MatchDocuments(const SearchServer& search_server, const string& query) {
+    //LOG_DURATION_STREAM("Operation time", cerr);
     try {
         cout << "Матчинг документов по запросу: "s << query << endl;
-        const int document_count = search_server.GetDocumentCount();
-        for (int index = 0; index < document_count; ++index) {
-            const int document_id = search_server.GetDocumentId(index);
+        for (const auto document_id : search_server) {
             const auto [words, status] = search_server.MatchDocument(query, document_id);
             PrintMatchDocumentResult(document_id, words, status);
         }
@@ -162,4 +192,3 @@ void MatchDocuments(const SearchServer& search_server, const string& query) {
         cout << "Ошибка матчинга документов на запрос "s << query << ": "s << e.what() << endl;
     }
 }
-

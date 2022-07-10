@@ -23,6 +23,3 @@ int RequestQueue::GetNoResultRequests() const {
 RequestQueue::QueryResult::QueryResult(int number_, bool result_) : number(number_), result(result_) {}
 
     
-
-
-
