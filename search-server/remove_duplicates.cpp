@@ -4,10 +4,10 @@ using namespace std;
 
 void RemoveDuplicates(SearchServer& search_server) {
     vector<int> id_to_delete;
-    map<set<string>, int> complect_words;
-    for (const int document_id : search_server) {
+    map<set<string_view>, int> complect_words;
+    for (int document_id : search_server) {
         const auto word_freq = search_server.GetWordFrequencies(document_id);
-        set<string> words;
+        set<string_view> words;
         for (const auto [word, freq] : word_freq) {
             words.insert(word);
         }
